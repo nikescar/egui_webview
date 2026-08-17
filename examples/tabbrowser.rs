@@ -190,12 +190,16 @@ impl BrowserApp {
                 ui.horizontal(|ui| {
                     // Back button
                     if ui.button("◀").clicked() {
-                        // Navigation logic will be added later
+                        if let Some(idx) = self.active_tab {
+                            self.tabs[idx].view.back();
+                        }
                     }
 
                     // Forward button
                     if ui.button("▶").clicked() {
-                        // Navigation logic will be added later
+                        if let Some(idx) = self.active_tab {
+                            self.tabs[idx].view.forward();
+                        }
                     }
 
                     ui.separator();
@@ -208,12 +212,20 @@ impl BrowserApp {
                     );
 
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        // Navigation logic will be added later
+                        if let Some(idx) = self.active_tab {
+                            if let Err(e) = self.tabs[idx].view.view.load_url(&self.url_input) {
+                                eprintln!("Failed to load URL: {}", e);
+                            }
+                        }
                     }
 
                     // Go button
                     if ui.button("Go").clicked() {
-                        // Navigation logic will be added later
+                        if let Some(idx) = self.active_tab {
+                            if let Err(e) = self.tabs[idx].view.view.load_url(&self.url_input) {
+                                eprintln!("Failed to load URL: {}", e);
+                            }
+                        }
                     }
                 });
 
