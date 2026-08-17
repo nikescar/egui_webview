@@ -148,8 +148,42 @@ impl BrowserApp {
                 ui.separator();
             }
 
-            // 2. Main content area (empty state for now)
+            // 2. Main content area (toolbar + content)
             ui.vertical(|ui| {
+                // Toolbar
+                ui.horizontal(|ui| {
+                    // Back button
+                    if ui.button("◀").clicked() {
+                        // Navigation logic will be added later
+                    }
+
+                    // Forward button
+                    if ui.button("▶").clicked() {
+                        // Navigation logic will be added later
+                    }
+
+                    ui.separator();
+
+                    // URL input
+                    ui.label("URL:");
+                    let response = ui.add(
+                        TextEdit::singleline(&mut self.url_input)
+                            .desired_width(ui.available_width() - 60.0)
+                    );
+
+                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        // Navigation logic will be added later
+                    }
+
+                    // Go button
+                    if ui.button("Go").clicked() {
+                        // Navigation logic will be added later
+                    }
+                });
+
+                ui.separator();
+
+                // Content area (empty state for now)
                 ui.centered_and_justified(|ui| {
                     ui.heading("No tabs open");
                     ui.label("Click '+' to create a new tab.");
