@@ -1,6 +1,6 @@
 #![allow(clippy::needless_pass_by_value)] // It's ok here as it is an example
 use eframe::{emath::Align, NativeOptions};
-use egui::{CentralPanel, Context, Id, Layout, Popup, TextEdit, Widget, Window};
+use egui::{Context, Id, Layout, Popup, TextEdit, Widget, Window};
 use wry::raw_window_handle::HasWindowHandle;
 
 use egui_webview::{init_webview, webview_end_frame, EguiWebView, WebViewEvent};
@@ -113,11 +113,47 @@ impl BrowserApp {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        CentralPanel::default().show(ui, |ui| {
-            ui.centered_and_justified(|ui| {
-                ui.heading("No tabs open");
-                ui.label("Click '+' to create a new tab.");
+    pub fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        ui.horizontal(|ui| {
+            // 1. Left Sidebar (manual layout)
+            if self.sidebar_open {
+                ui.vertical(|ui| {
+                    ui.set_width(280.0);
+                    egui::Frame::new()
+                        .fill(ui.style().visuals.faint_bg_color)
+                        .show(ui, |ui| {
+                            ui.set_min_width(280.0);
+                            ui.set_max_width(400.0);
+
+                            ui.vertical_centered(|ui| {
+                                ui.heading("💻 Sidebar");
+                            });
+                            ui.separator();
+                            ui.label("This is some demo text in the sidebar.");
+                            ui.label("You can add more content here later.");
+                            ui.add_space(10.0);
+                            ui.label("The sidebar is resizable by dragging the edge.");
+                            ui.label("Click the arrow to collapse/expand.");
+
+                            if ui.button("Hide Sidebar").clicked() {
+                                self.sidebar_open = false;
+                            }
+                        });
+                });
+                ui.separator();
+            } else {
+                if ui.button("Show Sidebar").clicked() {
+                    self.sidebar_open = true;
+                }
+                ui.separator();
+            }
+
+            // 2. Main content area (empty state for now)
+            ui.vertical(|ui| {
+                ui.centered_and_justified(|ui| {
+                    ui.heading("No tabs open");
+                    ui.label("Click '+' to create a new tab.");
+                });
             });
         });
     }
