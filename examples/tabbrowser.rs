@@ -293,6 +293,9 @@ impl BrowserApp {
                     if let Some(active_idx) = self.active_tab {
                         let tab = &mut self.tabs[active_idx];
 
+                        // Claim full available height
+                        ui.set_height(ui.available_height());
+
                         // Render browser content
                         let response = tab.view.ui(ui, ui.available_size());
 
