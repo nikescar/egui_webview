@@ -1,0 +1,24 @@
+[workspace]
+
+[package]
+name = "egui_webview"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.81"
+publish = false
+
+[dependencies]
+wry = "0.56.1"
+http = "1"
+egui = { version = "0.36", default-features = false, features = ["default_fonts"] }
+egui_extras = { version = "0.36", default-features = false, features = ["image"] }
+egui_inbox = "0.13.0"
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde_json = "1.0"
+
+[target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
+gtk = "0.18"
+
+[dev-dependencies]
+eframe = { version = "0.36", default-features = false, features = ["default_fonts","glow","x11", "wayland"] }
