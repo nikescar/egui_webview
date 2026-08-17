@@ -113,7 +113,21 @@ impl BrowserApp {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn add_tab(&mut self, ctx: &Context, frame: &impl HasWindowHandle, url: &str) {
+        let tab = WebBrowser::new(
+            ctx,
+            Id::new(format!("tab_{}", self.next_tab_id)),
+            url,
+            frame,
+        );
+
+        self.tabs.push(tab);
+        self.active_tab = Some(self.tabs.len() - 1);
+        self.url_input = url.to_string();
+        self.next_tab_id += 1;
+    }
+
+    pub fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         ui.horizontal(|ui| {
             // 1. Left Sidebar (manual layout)
             if self.sidebar_open {
@@ -183,11 +197,23 @@ impl BrowserApp {
 
                 ui.separator();
 
-                // Content area (empty state for now)
-                ui.centered_and_justified(|ui| {
-                    ui.heading("No tabs open");
-                    ui.label("Click '+' to create a new tab.");
-                });
+                // Content area (empty state or tabs)
+                if self.tabs.is_empty() {
+                    // Empty state
+                    ui.centered_and_justified(|ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.heading("No tabs open");
+                            ui.label("Click '+' to create a new tab.");
+                            ui.add_space(20.0);
+                            if ui.button("+ New Tab").clicked() {
+                                self.add_tab(ui.ctx(), frame, "https://dure.app");
+                            }
+                        });
+                    });
+                } else {
+                    // Tabs will be rendered here later
+                    ui.label("Tabs rendering coming soon...");
+                }
             });
         });
     }
