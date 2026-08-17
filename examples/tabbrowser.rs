@@ -285,9 +285,22 @@ impl BrowserApp {
 
                     ui.separator();
 
-                    // Browser content area (placeholder for now)
+                    // Browser content area
                     if let Some(active_idx) = self.active_tab {
-                        ui.label(format!("Active tab: {} (browser content coming soon)", active_idx + 1));
+                        let tab = &mut self.tabs[active_idx];
+
+                        // Render browser content
+                        let response = tab.view.ui(ui, ui.available_size());
+
+                        // Handle WebView events
+                        for event in response.events {
+                            if let WebViewEvent::Loaded(url) = event {
+                                // Update tab's URL bar
+                                tab.url_bar = url.clone();
+                                // Sync to shared URL input
+                                self.url_input = url;
+                            }
+                        }
                     }
                 }
             });
