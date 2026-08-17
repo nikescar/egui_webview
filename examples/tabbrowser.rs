@@ -170,8 +170,67 @@ impl BrowserApp {
                 ui.label("Click the arrow to collapse/expand.");
             });
 
-        // Placeholder for toolbar and content (to be replaced in next task)
-        ui.label("TODO: Add toolbar and content panels");
+        // 2. Top Toolbar Panel (navigation controls)
+        Panel::top("browser_toolbar")
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    // Sidebar toggle (leftmost position)
+                    if self.sidebar_open {
+                        if ui.button("◀◀").clicked() {
+                            self.sidebar_open = false;
+                        }
+                    } else {
+                        if ui.button("▶▶").clicked() {
+                            self.sidebar_open = true;
+                        }
+                    }
+
+                    ui.separator();
+
+                    // Back button
+                    if ui.button("◀").clicked() {
+                        if let Some(idx) = self.active_tab {
+                            self.tabs[idx].view.back();
+                        }
+                    }
+
+                    // Forward button
+                    if ui.button("▶").clicked() {
+                        if let Some(idx) = self.active_tab {
+                            self.tabs[idx].view.forward();
+                        }
+                    }
+
+                    ui.separator();
+
+                    // URL input
+                    ui.label("URL:");
+                    let response = ui.add(
+                        TextEdit::singleline(&mut self.url_input)
+                            .desired_width(ui.available_width() - 60.0)
+                    );
+
+                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        if let Some(idx) = self.active_tab {
+                            if let Err(e) = self.tabs[idx].view.view.load_url(&self.url_input) {
+                                eprintln!("Failed to load URL: {}", e);
+                            }
+                        }
+                    }
+
+                    // Go button
+                    if ui.button("Go").clicked() {
+                        if let Some(idx) = self.active_tab {
+                            if let Err(e) = self.tabs[idx].view.view.load_url(&self.url_input) {
+                                eprintln!("Failed to load URL: {}", e);
+                            }
+                        }
+                    }
+                });
+            });
+
+        // Placeholder for content panel (to be replaced in next task)
+        ui.label("TODO: Add CentralPanel");
     }
 }
 
