@@ -153,6 +153,9 @@ impl BrowserApp {
         ui.horizontal(|ui| {
             // 1. Left Sidebar (manual layout)
             if self.sidebar_open {
+                if ui.button("Hide Sidebar").clicked() {
+                    self.sidebar_open = false;
+                }
                 ui.vertical(|ui| {
                     ui.set_width(280.0);
                     egui::Frame::new()
@@ -170,10 +173,6 @@ impl BrowserApp {
                             ui.add_space(10.0);
                             ui.label("The sidebar is resizable by dragging the edge.");
                             ui.label("Click the arrow to collapse/expand.");
-
-                            if ui.button("Hide Sidebar").clicked() {
-                                self.sidebar_open = false;
-                            }
                         });
                 });
                 ui.separator();
@@ -188,6 +187,19 @@ impl BrowserApp {
             ui.vertical(|ui| {
                 // Toolbar
                 ui.horizontal(|ui| {
+                    // Sidebar toggle (leftmost position)
+                    if self.sidebar_open {
+                        if ui.button("◀◀").clicked() {
+                            self.sidebar_open = false;
+                        }
+                    } else {
+                        if ui.button("▶▶").clicked() {
+                            self.sidebar_open = true;
+                        }
+                    }
+
+                    ui.separator();
+
                     // Back button
                     if ui.button("◀").clicked() {
                         if let Some(idx) = self.active_tab {
