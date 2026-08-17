@@ -153,9 +153,6 @@ impl BrowserApp {
         ui.horizontal(|ui| {
             // 1. Left Sidebar (manual layout)
             if self.sidebar_open {
-                if ui.button("Hide Sidebar").clicked() {
-                    self.sidebar_open = false;
-                }
                 ui.vertical(|ui| {
                     ui.set_width(280.0);
                     egui::Frame::new()
@@ -175,13 +172,8 @@ impl BrowserApp {
                             ui.label("Click the arrow to collapse/expand.");
                         });
                 });
-                ui.separator();
-            } else {
-                if ui.button("Show Sidebar").clicked() {
-                    self.sidebar_open = true;
-                }
-                ui.separator();
             }
+            ui.separator();
 
             // 2. Main content area (toolbar + content)
             ui.vertical(|ui| {
