@@ -229,8 +229,80 @@ impl BrowserApp {
                 });
             });
 
-        // Placeholder for content panel (to be replaced in next task)
-        ui.label("TODO: Add CentralPanel");
+        // 3. Central Panel (tabs + browser content)
+        CentralPanel::default().show(ui, |ui| {
+            if self.tabs.is_empty() {
+                // Empty state
+                ui.centered_and_justified(|ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.heading("No tabs open");
+                        ui.label("Click '+' to create a new tab.");
+                        ui.add_space(20.0);
+                        if ui.button("+ New Tab").clicked() {
+                            self.add_tab(ui.ctx(), frame, "https://dure.app");
+                        }
+                    });
+                });
+            } else {
+                // Tab bar with horizontal scrolling
+                egui::ScrollArea::horizontal()
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let mut tab_to_close: Option<usize> = None;
+
+                            for (idx, tab) in self.tabs.iter().enumerate() {
+                                ui.group(|ui| {
+                                    ui.horizontal(|ui| {
+                                        // Tab button
+                                        if ui.selectable_label(
+                                            self.active_tab == Some(idx),
+                                            format!("Tab {}", idx + 1)
+                                        ).clicked() {
+                                            self.active_tab = Some(idx);
+                                            self.url_input = tab.url_bar.clone();
+                                        }
+
+                                        // Close button
+                                        if ui.small_button("×").clicked() {
+                                            tab_to_close = Some(idx);
+                                        }
+                                    });
+                                });
+                            }
+
+                            // + button to add new tab
+                            if ui.button("+").clicked() {
+                                self.add_tab(ui.ctx(), frame, "https://dure.app");
+                            }
+
+                            // Close tab after iteration (avoid borrow conflict)
+                            if let Some(idx) = tab_to_close {
+                                self.close_tab(idx);
+                            }
+                        });
+                    });
+
+                ui.separator();
+
+                // Browser content area
+                if let Some(active_idx) = self.active_tab {
+                    let tab = &mut self.tabs[active_idx];
+
+                    // ✅ CRITICAL FIX: ui.set_height() removed!
+                    // CentralPanel automatically provides full remaining height
+                    // ui.available_size() now returns correct height (not 150px)
+                    let response = tab.view.ui(ui, ui.available_size());
+
+                    // Handle WebView events
+                    for event in response.events {
+                        if let WebViewEvent::Loaded(url) = event {
+                            tab.url_bar = url.clone();
+                            self.url_input = url;
+                        }
+                    }
+                }
+            }
+        });
     }
 }
 
