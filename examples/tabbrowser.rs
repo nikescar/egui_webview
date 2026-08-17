@@ -211,8 +211,38 @@ impl BrowserApp {
                         });
                     });
                 } else {
-                    // Tabs will be rendered here later
-                    ui.label("Tabs rendering coming soon...");
+                    // Tab bar with horizontal scrolling
+                    egui::ScrollArea::horizontal()
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                for (idx, tab) in self.tabs.iter().enumerate() {
+                                    ui.group(|ui| {
+                                        ui.horizontal(|ui| {
+                                            // Tab button
+                                            if ui.selectable_label(
+                                                self.active_tab == Some(idx),
+                                                format!("Tab {}", idx + 1)
+                                            ).clicked() {
+                                                self.active_tab = Some(idx);
+                                                self.url_input = tab.url_bar.clone();
+                                            }
+                                        });
+                                    });
+                                }
+
+                                // + button to add new tab
+                                if ui.button("+").clicked() {
+                                    self.add_tab(ui.ctx(), frame, "https://dure.app");
+                                }
+                            });
+                        });
+
+                    ui.separator();
+
+                    // Browser content area (placeholder for now)
+                    if let Some(active_idx) = self.active_tab {
+                        ui.label(format!("Active tab: {} (browser content coming soon)", active_idx + 1));
+                    }
                 }
             });
         });
