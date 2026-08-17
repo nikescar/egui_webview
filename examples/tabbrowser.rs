@@ -127,6 +127,28 @@ impl BrowserApp {
         self.next_tab_id += 1;
     }
 
+    fn close_tab(&mut self, idx: usize) {
+        self.tabs.remove(idx);
+
+        if self.tabs.is_empty() {
+            self.active_tab = None;
+            self.url_input.clear();
+        } else if let Some(active) = self.active_tab {
+            if active >= self.tabs.len() {
+                // Active tab was beyond the removed tab, adjust index
+                self.active_tab = Some(self.tabs.len() - 1);
+            } else if idx <= active && active > 0 {
+                // Removed tab was before or at active, shift active left
+                self.active_tab = Some(active - 1);
+            }
+
+            // Sync URL bar with new active tab
+            if let Some(new_active) = self.active_tab {
+                self.url_input = self.tabs[new_active].url_bar.clone();
+            }
+        }
+    }
+
     pub fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         ui.horizontal(|ui| {
             // 1. Left Sidebar (manual layout)
@@ -215,6 +237,8 @@ impl BrowserApp {
                     egui::ScrollArea::horizontal()
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
+                                let mut tab_to_close: Option<usize> = None;
+
                                 for (idx, tab) in self.tabs.iter().enumerate() {
                                     ui.group(|ui| {
                                         ui.horizontal(|ui| {
@@ -226,6 +250,11 @@ impl BrowserApp {
                                                 self.active_tab = Some(idx);
                                                 self.url_input = tab.url_bar.clone();
                                             }
+
+                                            // Close button
+                                            if ui.small_button("×").clicked() {
+                                                tab_to_close = Some(idx);
+                                            }
                                         });
                                     });
                                 }
@@ -233,6 +262,11 @@ impl BrowserApp {
                                 // + button to add new tab
                                 if ui.button("+").clicked() {
                                     self.add_tab(ui.ctx(), frame, "https://dure.app");
+                                }
+
+                                // Close tab after iteration (avoid borrow conflict)
+                                if let Some(idx) = tab_to_close {
+                                    self.close_tab(idx);
                                 }
                             });
                         });
