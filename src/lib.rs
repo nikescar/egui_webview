@@ -1,11 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
 use std::fmt::Debug;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Mutex, Weak};
 
-use egui::mutex::Mutex;
 use egui::{Context, Id, Sense, Ui, Vec2};
-use egui_inbox::UiInbox;
 use serde::{Deserialize, Serialize};
 use wry::dpi::{Position, Size};
 use wry::raw_window_handle::HasWindowHandle;
@@ -18,8 +16,6 @@ use wry::{PageLoadEvent, WebView};
     target_os = "android"
 )))]
 use wry::WebViewBuilderExtUnix;
-
-pub mod native_text_field;
 
 #[cfg(not(any(
     target_os = "windows",
@@ -37,7 +33,7 @@ pub fn create_gtk_container() -> gtk::Fixed {
 pub struct EguiWebView {
     pub view: Arc<wry::WebView>,
     id: Id,
-    inbox: UiInbox<WebViewEvent>,
+    events: Arc<Mutex<VecDeque<WebViewEvent>>>,
     #[allow(dead_code)]
     context: Context,
     last_bounds: Option<wry::Rect>,
@@ -108,7 +104,10 @@ impl EguiWebView {
         container: &gtk::Fixed,
         build: impl FnOnce(wry::WebViewBuilder) -> wry::WebViewBuilder,
     ) -> Self {
-        let (tx, inbox) = UiInbox::channel();
+        let events = Arc::new(Mutex::new(VecDeque::new()));
+        let events_clone = events.clone();
+        let events_clone2 = events.clone();
+
         let id = id.into();
         ctx.memory_mut(|mem| {
             mem.data
@@ -128,35 +127,38 @@ impl EguiWebView {
         let view_ref_weak = view_ref.clone();
         let ctx_clone = ctx.clone();
 
-        let tx_clone = tx.clone();
-
         builder = builder
             .with_devtools(true)
             .with_on_page_load_handler(move |event, url| {
                 match event {
                     PageLoadEvent::Started => {
-                        let guard = view_ref_weak.lock();
-                        if let Some(view) = guard.as_ref() {
-                            if let Err(err) = view.evaluate_script(include_str!("webview.js")) {
-                                println!("Error loading webview script: {err}");
+                        if let Ok(guard) = view_ref_weak.lock() {
+                            if let Some(view) = guard.as_ref() {
+                                if let Err(err) = view.evaluate_script(include_str!("webview.js")) {
+                                    println!("Error loading webview script: {err}");
+                                }
                             }
                         }
                     }
                     PageLoadEvent::Finished => {}
                 }
 
-                tx_clone.send(WebViewEvent::Loaded(url)).ok();
+                if let Ok(mut queue) = events_clone.lock() {
+                    queue.push_back(WebViewEvent::Loaded(url));
+                }
             })
             .with_ipc_handler(move |msg: http::Request<String>| {
                 let result = Self::handle_js_event(msg.body().clone(), &ctx_clone);
-                tx.send(result).ok();
+                if let Ok(mut queue) = events_clone2.lock() {
+                    queue.push_back(result);
+                }
             });
 
         // Use GTK-native rendering for much better performance
         #[allow(clippy::arc_with_non_send_sync)]
         let web_view = Arc::new(builder.build_gtk(container).unwrap());
 
-        *view_ref.lock() = Some(web_view.clone());
+        *view_ref.lock().unwrap() = Some(web_view.clone());
 
         // Set visible once - never toggle visibility for performance
         web_view.set_visible(true).ok();
@@ -170,7 +172,7 @@ impl EguiWebView {
         });
 
         Self {
-            inbox,
+            events,
             view: web_view,
             id,
             context: ctx.clone(),
@@ -184,7 +186,10 @@ impl EguiWebView {
         window: &impl HasWindowHandle,
         build: impl FnOnce(wry::WebViewBuilder) -> wry::WebViewBuilder,
     ) -> Self {
-        let (tx, inbox) = UiInbox::channel();
+        let events = Arc::new(Mutex::new(VecDeque::new()));
+        let events_clone = events.clone();
+        let events_clone2 = events.clone();
+
         let id = id.into();
         ctx.memory_mut(|mem| {
             mem.data
@@ -204,34 +209,37 @@ impl EguiWebView {
         let view_ref_weak = view_ref.clone();
         let ctx_clone = ctx.clone();
 
-        let tx_clone = tx.clone();
-
         builder = builder
             .with_devtools(true)
             .with_on_page_load_handler(move |event, url| {
                 match event {
                     PageLoadEvent::Started => {
-                        let guard = view_ref_weak.lock();
-                        if let Some(view) = guard.as_ref() {
-                            if let Err(err) = view.evaluate_script(include_str!("webview.js")) {
-                                println!("Error loading webview script: {err}");
+                        if let Ok(guard) = view_ref_weak.lock() {
+                            if let Some(view) = guard.as_ref() {
+                                if let Err(err) = view.evaluate_script(include_str!("webview.js")) {
+                                    println!("Error loading webview script: {err}");
+                                }
                             }
                         }
                     }
                     PageLoadEvent::Finished => {}
                 }
 
-                tx_clone.send(WebViewEvent::Loaded(url)).ok();
+                if let Ok(mut queue) = events_clone.lock() {
+                    queue.push_back(WebViewEvent::Loaded(url));
+                }
             })
             .with_ipc_handler(move |msg: http::Request<String>| {
                 let result = Self::handle_js_event(msg.body().clone(), &ctx_clone);
-                tx.send(result).ok();
+                if let Ok(mut queue) = events_clone2.lock() {
+                    queue.push_back(result);
+                }
             });
 
         #[allow(clippy::arc_with_non_send_sync)]
         let web_view = Arc::new(builder.build_as_child(window).unwrap());
 
-        *view_ref.lock() = Some(web_view.clone());
+        *view_ref.lock().unwrap() = Some(web_view.clone());
 
         // Set visible once - never toggle visibility for performance
         web_view.set_visible(true).ok();
@@ -245,7 +253,7 @@ impl EguiWebView {
         });
 
         Self {
-            inbox,
+            events,
             view: web_view,
             id,
             context: ctx.clone(),
@@ -297,16 +305,17 @@ impl EguiWebView {
     pub fn ui(&mut self, ui: &mut Ui, size: Vec2) -> WebViewResponse {
         let response = ui.allocate_response(size, Sense::click());
 
-        let events = self
-            .inbox
-            .read(ui)
-            .inspect(|e| match e {
+        // Drain events from the queue
+        let events: Vec<WebViewEvent> = if let Ok(mut queue) = self.events.lock() {
+            queue.drain(..).inspect(|e| match e {
                 WebViewEvent::Focus => {
                     ui.memory_mut(|mem| mem.request_focus(response.id));
                 }
                 _ => {}
-            })
-            .collect();
+            }).collect()
+        } else {
+            Vec::new()
+        };
 
         if response.clicked() {
             response.request_focus();
