@@ -284,22 +284,28 @@ impl BrowserApp {
 
                 ui.separator();
 
-                // Browser content area
-                if let Some(active_idx) = self.active_tab {
-                    let tab = &mut self.tabs[active_idx];
+                // Browser content area - render all webviews, show only active
+                for (idx, tab) in self.tabs.iter_mut().enumerate() {
+                    let is_active = Some(idx) == self.active_tab;
+                    let size = if is_active {
+                        ui.available_size()
+                    } else {
+                        egui::vec2(0.0, 0.0)
+                    };
 
-                    // ✅ CRITICAL FIX: ui.set_height() removed!
-                    // CentralPanel automatically provides full remaining height
-                    // ui.available_size() now returns correct height (not 150px)
-                    let response = tab.view.ui(ui, ui.available_size());
+                    ui.push_id(tab.id, |ui| {
+                        let response = tab.view.ui(ui, size);
 
-                    // Handle WebView events
-                    for event in response.events {
-                        if let WebViewEvent::Loaded(url) = event {
-                            tab.url_bar = url.clone();
-                            self.url_input = url;
+                        // Handle WebView events only for active tab
+                        if is_active {
+                            for event in response.events {
+                                if let WebViewEvent::Loaded(url) = event {
+                                    tab.url_bar = url.clone();
+                                    self.url_input = url;
+                                }
+                            }
                         }
-                    }
+                    });
                 }
             }
         });
