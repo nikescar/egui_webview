@@ -1,6 +1,6 @@
 #![allow(clippy::needless_pass_by_value)] // It's ok here as it is an example
 use eframe::{emath::Align, NativeOptions};
-use egui::{Context, Id, Layout, Popup, TextEdit, Widget, Window};
+use egui::{Context, Id, Layout, Panel, Popup, TextEdit, Widget, Window, CentralPanel};
 use wry::raw_window_handle::HasWindowHandle;
 
 use egui_webview::{init_webview, webview_end_frame, EguiWebView, WebViewEvent};
@@ -35,6 +35,9 @@ impl WebBrowser {
             .open(&mut open)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
+                    ui.set_width(800.0);
+                    ui.set_height(1024.0);
+
                     // Button icon arrow left
                     if ui.button("◀").clicked() {
                         self.view.back();
@@ -49,7 +52,7 @@ impl WebBrowser {
                         let menu_button = ui.button("☰");
 
                         Popup::menu(&menu_button).show(|ui| {
-                            ui.set_width(ui.min_size().x + 200.0);
+                            ui.set_width(ui.min_size().x);
                             let _ = ui.button("I have no function");
                             let _ = ui.button("My existence is meaningless");
                             if ui.button("Why did you click me?").clicked() {
@@ -150,34 +153,26 @@ impl BrowserApp {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        ui.horizontal(|ui| {
-            // 1. Left Sidebar (manual layout)
-            if self.sidebar_open {
-                ui.vertical(|ui| {
-                    ui.set_width(280.0);
-                    egui::Frame::new()
-                        .fill(ui.style().visuals.faint_bg_color)
-                        .show(ui, |ui| {
-                            ui.set_min_width(280.0);
-                            ui.set_max_width(400.0);
-
-                            ui.vertical_centered(|ui| {
-                                ui.heading("💻 Sidebar");
-                            });
-                            ui.separator();
-                            ui.label("This is some demo text in the sidebar.");
-                            ui.label("You can add more content here later.");
-                            ui.add_space(10.0);
-                            ui.label("The sidebar is resizable by dragging the edge.");
-                            ui.label("Click the arrow to collapse/expand.");
-                        });
+        // 1. Left Sidebar Panel (collapsible, resizable)
+        Panel::left("browser_sidebar")
+            .resizable(true)
+            .default_size(100.0)
+            .size_range(80.0..=200.0)
+            .show_collapsible(ui, &mut self.sidebar_open, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.heading("💻 Sidebar");
                 });
-            }
-            ui.separator();
+                ui.separator();
+                ui.label("This is some demo text in the sidebar.");
+                ui.label("You can add more content here later.");
+                ui.add_space(10.0);
+                ui.label("The sidebar is resizable by dragging the edge.");
+                ui.label("Click the arrow to collapse/expand.");
+            });
 
-            // 2. Main content area (toolbar + content)
-            ui.vertical(|ui| {
-                // Toolbar
+        // 2. Top Toolbar Panel (navigation controls)
+        Panel::top("browser_toolbar")
+            .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     // Sidebar toggle (leftmost position)
                     if self.sidebar_open {
@@ -232,85 +227,87 @@ impl BrowserApp {
                         }
                     }
                 });
+            });
 
-                ui.separator();
+        // 3. Central Panel (tabs + browser content)
+        CentralPanel::default().show(ui, |ui| {
+            if self.tabs.is_empty() {
+                // Empty state
+                ui.centered_and_justified(|ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.heading("No tabs open");
+                        ui.label("Click '+' to create a new tab.");
+                        ui.add_space(20.0);
+                        if ui.button("+ New Tab").clicked() {
+                            self.add_tab(ui.ctx(), frame, "https://dure.app");
+                        }
+                    });
+                });
+            } else {
+                // Tab bar with horizontal scrolling
+                egui::ScrollArea::horizontal()
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let mut tab_to_close: Option<usize> = None;
 
-                // Content area (empty state or tabs)
-                if self.tabs.is_empty() {
-                    // Empty state
-                    ui.centered_and_justified(|ui| {
-                        ui.vertical_centered(|ui| {
-                            ui.heading("No tabs open");
-                            ui.label("Click '+' to create a new tab.");
-                            ui.add_space(20.0);
-                            if ui.button("+ New Tab").clicked() {
+                            for (idx, tab) in self.tabs.iter().enumerate() {
+                                ui.group(|ui| {
+                                    ui.horizontal(|ui| {
+                                        // Tab button
+                                        if ui.selectable_label(
+                                            self.active_tab == Some(idx),
+                                            format!("Tab {}", idx + 1)
+                                        ).clicked() {
+                                            self.active_tab = Some(idx);
+                                            self.url_input = tab.url_bar.clone();
+                                        }
+
+                                        // Close button
+                                        if ui.small_button("×").clicked() {
+                                            tab_to_close = Some(idx);
+                                        }
+                                    });
+                                });
+                            }
+
+                            // + button to add new tab
+                            if ui.button("+").clicked() {
                                 self.add_tab(ui.ctx(), frame, "https://dure.app");
+                            }
+
+                            // Close tab after iteration (avoid borrow conflict)
+                            if let Some(idx) = tab_to_close {
+                                self.close_tab(idx);
                             }
                         });
                     });
-                } else {
-                    // Tab bar with horizontal scrolling
-                    egui::ScrollArea::horizontal()
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                let mut tab_to_close: Option<usize> = None;
 
-                                for (idx, tab) in self.tabs.iter().enumerate() {
-                                    ui.group(|ui| {
-                                        ui.horizontal(|ui| {
-                                            // Tab button
-                                            if ui.selectable_label(
-                                                self.active_tab == Some(idx),
-                                                format!("Tab {}", idx + 1)
-                                            ).clicked() {
-                                                self.active_tab = Some(idx);
-                                                self.url_input = tab.url_bar.clone();
-                                            }
+                ui.separator();
 
-                                            // Close button
-                                            if ui.small_button("×").clicked() {
-                                                tab_to_close = Some(idx);
-                                            }
-                                        });
-                                    });
+                // Browser content area - render all webviews, show only active
+                for (idx, tab) in self.tabs.iter_mut().enumerate() {
+                    let is_active = Some(idx) == self.active_tab;
+                    let size = if is_active {
+                        ui.available_size()
+                    } else {
+                        egui::vec2(0.0, 0.0)
+                    };
+
+                    ui.push_id(tab.id, |ui| {
+                        let response = tab.view.ui(ui, size);
+
+                        // Handle WebView events only for active tab
+                        if is_active {
+                            for event in response.events {
+                                if let WebViewEvent::Loaded(url) = event {
+                                    tab.url_bar = url.clone();
+                                    self.url_input = url;
                                 }
-
-                                // + button to add new tab
-                                if ui.button("+").clicked() {
-                                    self.add_tab(ui.ctx(), frame, "https://dure.app");
-                                }
-
-                                // Close tab after iteration (avoid borrow conflict)
-                                if let Some(idx) = tab_to_close {
-                                    self.close_tab(idx);
-                                }
-                            });
-                        });
-
-                    ui.separator();
-
-                    // Browser content area
-                    if let Some(active_idx) = self.active_tab {
-                        let tab = &mut self.tabs[active_idx];
-
-                        // Claim full available height
-                        ui.set_height(ui.available_height());
-
-                        // Render browser content
-                        let response = tab.view.ui(ui, ui.available_size());
-
-                        // Handle WebView events
-                        for event in response.events {
-                            if let WebViewEvent::Loaded(url) = event {
-                                // Update tab's URL bar
-                                tab.url_bar = url.clone();
-                                // Sync to shared URL input
-                                self.url_input = url;
                             }
                         }
-                    }
+                    });
                 }
-            });
+            }
         });
     }
 }
