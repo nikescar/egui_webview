@@ -5,8 +5,16 @@ use std::sync::{Arc, Mutex, Weak};
 
 use egui::{Context, Id, Sense, Ui, Vec2};
 use serde::{Deserialize, Serialize};
+
+// Platform-specific WebView implementations
+#[cfg(target_os = "android")]
+mod android_webview;
+
+#[cfg(not(target_os = "android"))]
 use wry::dpi::{Position, Size};
+#[cfg(not(target_os = "android"))]
 use wry::raw_window_handle::HasWindowHandle;
+#[cfg(not(target_os = "android"))]
 use wry::{PageLoadEvent, WebView};
 
 #[cfg(not(any(
@@ -30,6 +38,8 @@ pub fn create_gtk_container() -> gtk::Fixed {
     container
 }
 
+// Desktop version uses wry
+#[cfg(not(target_os = "android"))]
 pub struct EguiWebView {
     pub view: Arc<wry::WebView>,
     id: Id,
@@ -37,6 +47,16 @@ pub struct EguiWebView {
     #[allow(dead_code)]
     context: Context,
     last_bounds: Option<wry::Rect>,
+}
+
+// Android version uses JNI WebView
+#[cfg(target_os = "android")]
+pub struct EguiWebView {
+    pub view: Arc<android_webview::AndroidWebView>,
+    id: Id,
+    events: Arc<Mutex<VecDeque<WebViewEvent>>>,
+    #[allow(dead_code)]
+    context: Context,
 }
 
 impl Debug for EguiWebView {
@@ -453,4 +473,75 @@ pub fn webview_end_frame(ctx: &Context) {
 
         state.rendered_this_frame.clear();
     });
+}
+
+// Android-specific implementation
+#[cfg(target_os = "android")]
+impl EguiWebView {
+    /// Create a new Android WebView
+    pub fn new(
+        ctx: &Context,
+        id: impl Into<Id>,
+        _window: &impl std::any::Any, // Ignored on Android
+        build: impl FnOnce(&str) -> String,
+    ) -> Self {
+        let id = id.into();
+        let events = Arc::new(Mutex::new(VecDeque::new()));
+
+        // Get initial URL from builder closure
+        let url = build("about:blank");
+
+        // Create Android WebView via JNI
+        let view = Arc::new(
+            android_webview::AndroidWebView::new(&url)
+                .expect("Failed to create Android WebView")
+        );
+
+        Self {
+            view,
+            id,
+            events,
+            context: ctx.clone(),
+        }
+    }
+
+    /// Render the webview in the UI (Android version)
+    pub fn ui(&mut self, ui: &mut Ui) -> WebViewResponse {
+        // Allocate space for webview in the UI
+        let response = ui.allocate_response(
+            ui.available_size(),
+            Sense::click_and_drag(),
+        );
+
+        // Collect events
+        let events = if let Ok(mut queue) = self.events.lock() {
+            queue.drain(..).collect()
+        } else {
+            Vec::new()
+        };
+
+        // Android WebView bounds are managed by Android layout system
+        // No need to set bounds like on desktop
+
+        WebViewResponse {
+            events,
+            egui_response: response,
+            webview_visible: true,
+        }
+    }
+
+    /// Navigate to URL
+    pub fn load_url(&self, url: &str) {
+        self.view.load_url(url).ok();
+    }
+
+    /// Go back
+    pub fn go_back(&self) {
+        self.view.go_back().ok();
+    }
+
+    /// Go forward
+    pub fn go_forward(&self) {
+        self.view.go_forward().ok();
+    }
 }

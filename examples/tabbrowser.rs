@@ -1,6 +1,6 @@
 #![allow(clippy::needless_pass_by_value)] // It's ok here as it is an example
-use eframe::{emath::Align, NativeOptions};
-use egui::{Context, Id, Layout, Panel, Popup, TextEdit, Widget, Window, CentralPanel};
+use eframe::{emath::Align, App, NativeOptions};
+use egui::{CentralPanel, Context, Id, Layout, SidePanel, TextEdit, TopBottomPanel, Widget, Window};
 use wry::raw_window_handle::HasWindowHandle;
 
 use egui_webview::{init_webview, webview_end_frame, EguiWebView, WebViewEvent};
@@ -49,10 +49,8 @@ impl WebBrowser {
                     ui.label("URL:");
 
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let menu_button = ui.button("☰");
-
-                        Popup::menu(&menu_button).show(|ui| {
-                            ui.set_width(ui.min_size().x);
+                        ui.menu_button("☰", |ui| {
+                            ui.set_min_width(150.0);
                             let _ = ui.button("I have no function");
                             let _ = ui.button("My existence is meaningless");
                             if ui.button("Why did you click me?").clicked() {
@@ -101,18 +99,18 @@ pub struct BrowserApp {
     sidebar_open: bool,
     url_input: String,
     next_tab_id: usize,
+    initialized: bool,
 }
 
 impl BrowserApp {
-    pub fn new(ctx: &Context) -> Self {
-        init_webview(ctx);
-
+    pub fn new() -> Self {
         Self {
             tabs: Vec::new(),
             active_tab: None,
             sidebar_open: true,
             url_input: String::new(),
             next_tab_id: 0,
+            initialized: false,
         }
     }
 
@@ -152,13 +150,13 @@ impl BrowserApp {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+    pub fn ui(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         // 1. Left Sidebar Panel (collapsible, resizable)
-        Panel::left("browser_sidebar")
+        SidePanel::left("browser_sidebar")
             .resizable(true)
-            .default_size(100.0)
-            .size_range(80.0..=200.0)
-            .show_collapsible(ui, &mut self.sidebar_open, |ui| {
+            .default_width(100.0)
+            .width_range(80.0..=200.0)
+            .show_animated(ctx, self.sidebar_open, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.heading("💻 Sidebar");
                 });
@@ -171,8 +169,8 @@ impl BrowserApp {
             });
 
         // 2. Top Toolbar Panel (navigation controls)
-        Panel::top("browser_toolbar")
-            .show(ui, |ui| {
+        TopBottomPanel::top("browser_toolbar")
+            .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     // Sidebar toggle (leftmost position)
                     if self.sidebar_open {
@@ -230,7 +228,7 @@ impl BrowserApp {
             });
 
         // 3. Central Panel (tabs + browser content)
-        CentralPanel::default().show(ui, |ui| {
+        CentralPanel::default().show(ctx, |ui| {
             if self.tabs.is_empty() {
                 // Empty state
                 ui.centered_and_justified(|ui| {
@@ -312,6 +310,39 @@ impl BrowserApp {
     }
 }
 
+impl App for BrowserApp {
+    fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        // Process GTK events for webview
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd",
+        ))]
+        {
+            while gtk::events_pending() {
+                gtk::main_iteration_do(false);
+            }
+        }
+
+        // Initialize webview system on first frame
+        if !self.initialized {
+            init_webview(ctx);
+            egui_extras::install_image_loaders(ctx);
+            self.initialized = true;
+        }
+
+        // CRITICAL: Request continuous repainting for responsive webview input
+        ctx.request_repaint();
+
+        // Render BrowserApp UI
+        self.ui(ctx, frame);
+
+        webview_end_frame(ctx);
+    }
+}
+
 pub fn main() -> eframe::Result<()> {
     // Initialize GTK for webview support on Linux/OpenBSD
     #[cfg(any(
@@ -323,42 +354,11 @@ pub fn main() -> eframe::Result<()> {
     ))]
     gtk::init().expect("Failed to initialize GTK");
 
-    let mut browser_app: Option<BrowserApp> = None;
+    let native_options = NativeOptions::default();
 
-    eframe::run_ui_native(
+    eframe::run_native(
         "Tabbed Browser",
-        NativeOptions::default(),
-        move |ui, frame| {
-            // Process GTK events for webview
-            #[cfg(any(
-                target_os = "linux",
-                target_os = "dragonfly",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd",
-            ))]
-            {
-                while gtk::events_pending() {
-                    gtk::main_iteration_do(false);
-                }
-            }
-
-            egui_extras::install_image_loaders(ui.ctx());
-
-            // CRITICAL: Request continuous repainting for responsive webview input
-            ui.ctx().request_repaint();
-
-            // Initialize BrowserApp on first frame
-            if browser_app.is_none() {
-                browser_app = Some(BrowserApp::new(ui.ctx()));
-            }
-
-            // Render BrowserApp UI
-            if let Some(app) = &mut browser_app {
-                app.ui(ui, frame);
-            }
-
-            webview_end_frame(ui.ctx());
-        },
+        native_options,
+        Box::new(|_cc| Ok(Box::new(BrowserApp::new()))),
     )
 }
