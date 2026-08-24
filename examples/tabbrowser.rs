@@ -344,6 +344,22 @@ impl App for BrowserApp {
 }
 
 pub fn main() -> eframe::Result<()> {
+    // wry's webkitgtk backend can only embed a child WebView into an X11 window (via XEmbed);
+    // under a native Wayland session `build_as_child` fails with `UnsupportedWindowHandle`.
+    // Force winit and GTK onto X11 (via XWayland) before any window/display is created.
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+    ))]
+    // Safety: called at the very start of `main`, before any other threads exist.
+    unsafe {
+        std::env::remove_var("WAYLAND_DISPLAY");
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
+
     // Initialize GTK for webview support on Linux/OpenBSD
     #[cfg(any(
         target_os = "linux",
