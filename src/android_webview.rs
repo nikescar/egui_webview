@@ -67,6 +67,9 @@ impl AndroidWebView {
         // Create global reference to keep WebView alive
         let webview = env.new_global_ref(&webview_local)?;
 
+        // Drop env to release borrow on vm before moving it
+        drop(env);
+
         Ok(Self { vm, webview })
     }
 

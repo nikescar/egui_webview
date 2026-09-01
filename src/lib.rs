@@ -282,46 +282,6 @@ impl EguiWebView {
         }
     }
 
-    #[cfg(target_os = "android")]
-    pub fn new(
-        ctx: &Context,
-        id: impl Into<Id>,
-        url: &str,
-    ) -> Self {
-        let events = Arc::new(Mutex::new(VecDeque::new()));
-        let id = id.into();
-
-        ctx.memory_mut(|mem| {
-            mem.data
-                .get_temp_mut_or_insert_with::<GlobalWebViewState>(
-                    Id::new(WEBVIEW_ID),
-                    || unreachable!(),
-                )
-                .clone()
-        });
-
-        // Create Android WebView
-        let web_view = Arc::new(
-            android_webview::AndroidWebView::new(url)
-                .expect("Failed to create Android WebView")
-        );
-
-        ctx.data_mut(|data| {
-            let state = data.get_temp_mut_or_insert_with::<GlobalWebViewState>(
-                Id::new(WEBVIEW_ID),
-                || unreachable!(),
-            );
-            state.views.insert(id, Arc::downgrade(&web_view));
-        });
-
-        Self {
-            events,
-            view: web_view,
-            id,
-            context: ctx.clone(),
-        }
-    }
-
     fn handle_js_event(msg: String, _ctx: &Context) -> WebViewEvent {
         let event = serde_json::from_str::<JsEvent>(&msg).map(|e| e.event);
 
@@ -363,6 +323,7 @@ impl EguiWebView {
             .ok();
     }
 
+    #[cfg(not(target_os = "android"))]
     pub fn ui(&mut self, ui: &mut Ui, size: Vec2) -> WebViewResponse {
         let response = ui.allocate_response(size, Sense::click());
 
