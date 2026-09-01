@@ -218,4 +218,19 @@ impl AndroidWebView {
         // Would need to call setLayoutParams if we had the parent ViewGroup
         Ok(())
     }
+
+    /// Evaluate JavaScript code
+    pub fn evaluate_script(&self, script: &str) -> Result<(), Box<dyn Error>> {
+        let mut env = self.vm.attach_current_thread()?;
+        let script_string = env.new_string(script)?;
+
+        env.call_method(
+            self.webview.as_obj(),
+            "evaluateJavascript",
+            "(Ljava/lang/String;Landroid/webkit/ValueCallback;)V",
+            &[JValue::Object(&script_string), JValue::Object(&JObject::null())],
+        )?;
+
+        Ok(())
+    }
 }

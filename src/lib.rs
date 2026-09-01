@@ -200,6 +200,7 @@ impl EguiWebView {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     pub fn new(
         ctx: &Context,
         id: impl Into<Id>,
@@ -278,6 +279,46 @@ impl EguiWebView {
             id,
             context: ctx.clone(),
             last_bounds: None,
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn new(
+        ctx: &Context,
+        id: impl Into<Id>,
+        url: &str,
+    ) -> Self {
+        let events = Arc::new(Mutex::new(VecDeque::new()));
+        let id = id.into();
+
+        ctx.memory_mut(|mem| {
+            mem.data
+                .get_temp_mut_or_insert_with::<GlobalWebViewState>(
+                    Id::new(WEBVIEW_ID),
+                    || unreachable!(),
+                )
+                .clone()
+        });
+
+        // Create Android WebView
+        let web_view = Arc::new(
+            android_webview::AndroidWebView::new(url)
+                .expect("Failed to create Android WebView")
+        );
+
+        ctx.data_mut(|data| {
+            let state = data.get_temp_mut_or_insert_with::<GlobalWebViewState>(
+                Id::new(WEBVIEW_ID),
+                || unreachable!(),
+            );
+            state.views.insert(id, Arc::downgrade(&web_view));
+        });
+
+        Self {
+            events,
+            view: web_view,
+            id,
+            context: ctx.clone(),
         }
     }
 
@@ -366,44 +407,54 @@ impl EguiWebView {
 
         // Convert egui points to physical pixels using pixels_per_point
         // This handles different DPI/zoom ratios across monitors
-        let pixels_per_point = ui.ctx().pixels_per_point();
-        let physical_rect = response.rect * pixels_per_point;
+        #[cfg(not(target_os = "android"))]
+        {
+            let pixels_per_point = ui.ctx().pixels_per_point();
+            let physical_rect = response.rect * pixels_per_point;
 
-        // Only update bounds if size/position changed (major performance optimization)
-        let new_bounds = wry::Rect {
-            position: Position::Physical(wry::dpi::PhysicalPosition::new(
-                physical_rect.min.x as i32,
-                physical_rect.min.y as i32,
-            )),
-            size: Size::Physical(wry::dpi::PhysicalSize::new(
-                physical_rect.width() as u32,
-                physical_rect.height() as u32,
-            )),
-        };
-
-        // Compare bounds manually since wry::Rect doesn't implement PartialEq
-        let bounds_changed = if let Some(last) = &self.last_bounds {
-            // Extract physical positions and sizes for comparison
-            let (last_x, last_y) = match last.position {
-                Position::Physical(p) => (p.x, p.y),
-                Position::Logical(p) => (p.x as i32, p.y as i32),
-            };
-            let (last_w, last_h) = match last.size {
-                Size::Physical(s) => (s.width, s.height),
-                Size::Logical(s) => (s.width as u32, s.height as u32),
+            // Only update bounds if size/position changed (major performance optimization)
+            let new_bounds = wry::Rect {
+                position: Position::Physical(wry::dpi::PhysicalPosition::new(
+                    physical_rect.min.x as i32,
+                    physical_rect.min.y as i32,
+                )),
+                size: Size::Physical(wry::dpi::PhysicalSize::new(
+                    physical_rect.width() as u32,
+                    physical_rect.height() as u32,
+                )),
             };
 
-            last_x != physical_rect.min.x as i32
-                || last_y != physical_rect.min.y as i32
-                || last_w != physical_rect.width() as u32
-                || last_h != physical_rect.height() as u32
-        } else {
-            true // First time, always update
-        };
+            // Compare bounds manually since wry::Rect doesn't implement PartialEq
+            let bounds_changed = if let Some(last) = &self.last_bounds {
+                // Extract physical positions and sizes for comparison
+                let (last_x, last_y) = match last.position {
+                    Position::Physical(p) => (p.x, p.y),
+                    Position::Logical(p) => (p.x as i32, p.y as i32),
+                };
+                let (last_w, last_h) = match last.size {
+                    Size::Physical(s) => (s.width, s.height),
+                    Size::Logical(s) => (s.width as u32, s.height as u32),
+                };
 
-        if bounds_changed {
-            self.view.set_bounds(new_bounds).ok();
-            self.last_bounds = Some(new_bounds);
+                last_x != physical_rect.min.x as i32
+                    || last_y != physical_rect.min.y as i32
+                    || last_w != physical_rect.width() as u32
+                    || last_h != physical_rect.height() as u32
+            } else {
+                true // First time, always update
+            };
+
+            if bounds_changed {
+                self.view.set_bounds(new_bounds).ok();
+                self.last_bounds = Some(new_bounds);
+            }
+        }
+
+        // Android: bounds management handled by Android layout system
+        #[cfg(target_os = "android")]
+        {
+            // Android WebView bounds are managed by the view hierarchy
+            // No need to manually set bounds here
         }
 
         WebViewResponse {
@@ -415,9 +466,17 @@ impl EguiWebView {
 
 }
 
+#[cfg(not(target_os = "android"))]
 #[derive(Clone, Debug)]
 struct GlobalWebViewState {
     views: HashMap<Id, Weak<WebView>>,
+    rendered_this_frame: HashSet<Id>,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Clone, Debug)]
+struct GlobalWebViewState {
+    views: HashMap<Id, Weak<android_webview::AndroidWebView>>,
     rendered_this_frame: HashSet<Id>,
 }
 
